@@ -8,6 +8,10 @@ CODE_OF_CONDUCT.md
 LICENSE
 README.md
 Dockerfile
+bin/exercism-parser
+bin/exercism-parser.o
 bin/run-in-docker.sh
 bin/run-tests-in-docker.sh
 bin/run-tests.sh
+zig-cache/
+.zig-cache/

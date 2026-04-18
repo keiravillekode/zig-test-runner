@@ -17,15 +17,19 @@ RUN tar -xvf ${RELEASE}.tar.xz \
     && rm -rf /tmp/${RELEASE}/lib/libc/include/any-windows-any \
     && mv /tmp/${RELEASE} /opt/zig
 
-FROM ${REPO}:${IMAGE} AS runner
+# Build the output-processing parser.
+COPY src/parser.zig /tmp/parser.zig
+RUN mkdir -p /opt/test-runner/bin \
+    && /opt/zig/zig build-exe /tmp/parser.zig \
+        -target x86_64-linux-musl -O ReleaseSafe \
+        -femit-bin=/opt/test-runner/bin/exercism-parser
 
-# install packages required to run the tests
-# hadolint ignore=DL3018
-RUN apk add --no-cache jq
+FROM ${REPO}:${IMAGE} AS runner
 
 RUN addgroup ziggroup \
     && adduser --disabled-password --gecos ziggy --ingroup ziggroup ziggy
 COPY --from=builder --chown=ziggy:ziggroup /opt/zig/ /opt/zig/
+COPY --from=builder --chown=ziggy:ziggroup /opt/test-runner/bin/exercism-parser /opt/test-runner/bin/exercism-parser
 ENV PATH=$PATH:/opt/zig
 
 USER ziggy:ziggroup
