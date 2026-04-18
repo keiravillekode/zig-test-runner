@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "status": "pass",
+  "tests": [
+    {
+      "name": "no matches",
+      "status": "pass"
+    },
+    {
+      "name": "detects two anagrams",
+      "status": "pass"
+    },
+    {
+      "name": "detects three anagrams",
+      "status": "pass"
+    },
+    {
+      "name": "detects anagrams case-insensitively",
+      "status": "pass"
+    },
+    {
+      "name": "words are not anagrams of themselves",
+      "status": "pass"
+    },
+    {
+      "name": "detects many anagrams of 26-letter words",
+      "status": "pass"
+    }
+  ]
+}
