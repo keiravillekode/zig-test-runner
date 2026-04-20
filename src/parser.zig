@@ -10,6 +10,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList(u8);
+const Io = std.Io;
 
 const TRUNCATE_AT: usize = 500;
 const TRUNCATED_SUFFIX: []const u8 = " [output truncated]";
@@ -169,14 +170,12 @@ fn writeResults(out: *ArrayList, alloc: Allocator, overall: []const u8, tests: [
     try out.appendSlice(alloc, "  ]\n}\n");
 }
 
-pub fn main() !u8 {
-    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
-    defer _ = gpa.deinit();
-    const alloc = gpa.allocator();
+pub fn main(init: std.process.Init) !u8 {
+    const arena = init.arena.allocator();
+    const gpa = init.gpa;
+    const io = init.io;
 
-    // Parse args
-    const args = try std.process.argsAlloc(alloc);
-    defer std.process.argsFree(alloc, args);
+    const args = try init.minimal.args.toSlice(arena);
 
     var exit_code: i32 = 0;
     var output_path: ?[]const u8 = null;
@@ -185,37 +184,38 @@ pub fn main() !u8 {
         const arg = args[ai];
         if (std.mem.eql(u8, arg, "--exit-code")) {
             ai += 1;
-            if (ai >= args.len) return err("missing value for --exit-code\n");
+            if (ai >= args.len) return errMsg(io, "missing value for --exit-code\n");
             exit_code = std.fmt.parseInt(i32, args[ai], 10) catch
-                return err("invalid --exit-code value\n");
+                return errMsg(io, "invalid --exit-code value\n");
         } else if (std.mem.eql(u8, arg, "--output")) {
             ai += 1;
-            if (ai >= args.len) return err("missing value for --output\n");
+            if (ai >= args.len) return errMsg(io, "missing value for --output\n");
             output_path = args[ai];
         } else {
-            return err("unknown argument\n");
+            return errMsg(io, "unknown argument\n");
         }
     }
-    const out_path = output_path orelse return err("--output is required\n");
+    const out_path = output_path orelse return errMsg(io, "--output is required\n");
 
-    // Read stdin
-    const stdin = std.fs.File.stdin();
-    const input = try stdin.readToEndAlloc(alloc, 1 << 24);
-    defer alloc.free(input);
+    // Read stdin into a heap buffer.
+    var stdin_buf: [4096]u8 = undefined;
+    var stdin_reader = Io.File.stdin().reader(io, &stdin_buf);
+    const input = try stdin_reader.interface.allocRemaining(gpa, .unlimited);
+    defer gpa.free(input);
 
-    var tests: std.ArrayList(TestCase) = .{};
+    var tests: std.ArrayList(TestCase) = .empty;
     defer {
         for (tests.items) |*t| {
-            t.message.deinit(alloc);
-            t.output.deinit(alloc);
+            t.message.deinit(gpa);
+            t.output.deinit(gpa);
         }
-        tests.deinit(alloc);
+        tests.deinit(gpa);
     }
 
     var current: ?TestCase = null;
     defer if (current) |*c| {
-        c.message.deinit(alloc);
-        c.output.deinit(alloc);
+        c.message.deinit(gpa);
+        c.output.deinit(gpa);
     };
 
     var seen_test_line: bool = false;
@@ -225,16 +225,16 @@ pub fn main() !u8 {
         if (isTestLine(line)) {
             seen_test_line = true;
             if (current) |c| {
-                try tests.append(alloc, c);
+                try tests.append(gpa, c);
                 current = null;
             }
             const parts = extractNameAndTail(line);
             var tc: TestCase = .{
                 .name = parts.name,
                 .status = .pass,
-                .message = .{},
+                .message = .empty,
                 .message_set = false,
-                .output = .{},
+                .output = .empty,
             };
             if (std.mem.endsWith(u8, line, "OK")) {
                 tc.status = .pass;
@@ -244,7 +244,7 @@ pub fn main() !u8 {
             } else {
                 tc.status = .pending;
                 tc.message_set = true;
-                try tc.output.appendSlice(alloc, parts.tail);
+                try tc.output.appendSlice(gpa, parts.tail);
             }
             current = tc;
         } else if (current != null and current.?.status == .pending) {
@@ -252,52 +252,52 @@ pub fn main() !u8 {
                 current.?.status = .pass;
             } else if (isFailLine(line)) {
                 current.?.status = .fail;
-                try current.?.message.appendSlice(alloc, line);
+                try current.?.message.appendSlice(gpa, line);
             } else {
-                try appendWithNewline(&current.?.output, alloc, line);
+                try appendWithNewline(&current.?.output, gpa, line);
             }
         } else if (current != null and current.?.status == .fail and !isSummaryLine(line)) {
-            try appendWithNewline(&current.?.message, alloc, line);
+            try appendWithNewline(&current.?.message, gpa, line);
         } else if (isSummaryLine(line)) {
             if (current) |c| {
-                try tests.append(alloc, c);
+                try tests.append(gpa, c);
                 current = null;
             }
         }
     }
     if (current) |c| {
-        try tests.append(alloc, c);
+        try tests.append(gpa, c);
         current = null;
     }
 
     // Build output in memory so the final write is atomic-ish (single call).
-    var out_buf: ArrayList = .{};
-    defer out_buf.deinit(alloc);
+    var out_buf: ArrayList = .empty;
+    defer out_buf.deinit(gpa);
 
-    // Compile-error case: non-zero exit, "error:" somewhere in output,
-    // and no recognizable test lines.
     if (exit_code != 0 and !seen_test_line and std.mem.indexOf(u8, input, "error:") != null) {
         // Trim trailing newlines from the raw output before embedding.
         var end: usize = input.len;
         while (end > 0 and input[end - 1] == '\n') : (end -= 1) {}
-        try writeResultsError(&out_buf, alloc, input[0..end]);
+        try writeResultsError(&out_buf, gpa, input[0..end]);
     } else {
-        // Normal case: trim/truncate per-test fields then emit.
         for (tests.items) |*t| {
             if (t.message_set) stripTrailingNewlines(&t.message);
             stripTrailingNewlines(&t.output);
-            if (t.output.items.len > 0) try truncateOutput(&t.output, alloc);
+            if (t.output.items.len > 0) try truncateOutput(&t.output, gpa);
         }
         const overall: []const u8 = if (exit_code == 0) "pass" else "fail";
-        try writeResults(&out_buf, alloc, overall, tests.items);
+        try writeResults(&out_buf, gpa, overall, tests.items);
     }
 
-    try std.fs.cwd().writeFile(.{ .sub_path = out_path, .data = out_buf.items });
+    try Io.Dir.cwd().writeFile(io, .{
+        .sub_path = out_path,
+        .data = out_buf.items,
+        .flags = .{},
+    });
     return 0;
 }
 
-fn err(msg: []const u8) !u8 {
-    const stderr = std.fs.File.stderr();
-    _ = try stderr.write(msg);
+fn errMsg(io: Io, msg: []const u8) !u8 {
+    try Io.File.stderr().writeStreamingAll(io, msg);
     return 1;
 }
