@@ -19,9 +19,11 @@ RUN tar -xvf ${RELEASE}.tar.xz \
 
 FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS runner
 
-# install packages required to run the tests
+# install packages required to run the tests.
+# gawk is needed for `match(str, regexp, array)`, a GNU extension that the
+# busybox awk shipped in the base image does not support.
 # hadolint ignore=DL3018
-RUN apk add --no-cache bash jq
+RUN apk add --no-cache bash gawk jq
 
 RUN addgroup ziggroup \
     && adduser --disabled-password --gecos ziggy --ingroup ziggroup ziggy
@@ -31,6 +33,7 @@ ENV PATH=$PATH:/opt/zig
 USER ziggy:ziggroup
 WORKDIR /opt/test-runner
 COPY --chown=ziggy:ziggroup bin/run.sh bin/run.sh
+COPY --chown=ziggy:ziggroup bin/scrape-tests.awk bin/scrape-tests.awk
 # Initialize a zig cache
 COPY --chown=ziggy:ziggroup tests/example-success/example_success.zig init-zig-cache/
 COPY --chown=ziggy:ziggroup tests/example-success/test_example_success.zig init-zig-cache/

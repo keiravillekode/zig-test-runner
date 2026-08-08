@@ -1,0 +1,32 @@
+{
+  "version": 3,
+  "status": "fail",
+  "tests": [
+    {
+      "name": "expected minutes in oven",
+      "status": "pass",
+      "test_code": "try testing.expectEqual(40, lasagna.expectedMinutesInOven());",
+      "task_id": 1
+    },
+    {
+      "name": "remaining minutes in oven",
+      "status": "pass",
+      "test_code": "try testing.expectEqual(15, lasagna.remainingMinutesInOven(25));",
+      "task_id": 2
+    },
+    {
+      "name": "preparation time for one layer",
+      "status": "fail",
+      "message": "FAIL (TestExpectedEqual)\n/opt/zig/lib/std/testing.zig:118:17: <MEMHASH> in expectEqualInner__anon_<ANON> (std.zig)\n                return error.TestExpectedEqual;\n                ^\n/opt/zig/lib/std/testing.zig:83:5: <MEMHASH> in expectEqual (test_example_concept_tasks.zig)\n    return expectEqualInner(T, expected, actual);\n    ^\ntest_example_concept_tasks.zig:18:5: <MEMHASH> in test.preparation time for one layer (test_example_concept_tasks.zig)\n    try testing.expectEqual(2, lasagna.preparationTimeInMinutes(1));\n    ^",
+      "test_code": "try testing.expectEqual(2, lasagna.preparationTimeInMinutes(1));",
+      "task_id": 3
+    },
+    {
+      "name": "preparation time for four layers",
+      "status": "fail",
+      "message": "FAIL (TestExpectedEqual)\n/opt/zig/lib/std/testing.zig:118:17: <MEMHASH> in expectEqualInner__anon_<ANON> (std.zig)\n                return error.TestExpectedEqual;\n                ^\n/opt/zig/lib/std/testing.zig:83:5: <MEMHASH> in expectEqual (test_example_concept_tasks.zig)\n    return expectEqualInner(T, expected, actual);\n    ^\ntest_example_concept_tasks.zig:23:5: <MEMHASH> in test.preparation time for four layers (test_example_concept_tasks.zig)\n    try testing.expectEqual(8, lasagna.preparationTimeInMinutes(4));\n    ^",
+      "test_code": "try testing.expectEqual(8, lasagna.preparationTimeInMinutes(4));",
+      "task_id": 3
+    }
+  ]
+}

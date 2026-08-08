@@ -9,11 +9,16 @@
 # $3: path to output directory
 
 # Output:
-# Writes a v2 results.json to the output directory, per
+# Writes a v3 results.json to the output directory, per
 # https://github.com/exercism/docs/blob/main/building/tooling/test-runners/interface.md
 
 # Example:
 # ./bin/run.sh two-fer path/to/solution/folder/ path/to/output/directory/
+
+readonly INTERFACE_VERSION=3
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
+readonly script_dir
 
 # Print usage and exit non-zero. Called when required args are missing.
 usage() {
@@ -48,10 +53,33 @@ run_zig_test() {
 # Emit a top-level error report (compile failure) and exit successfully —
 # the runner completed its job even though the solution did not build.
 emit_compile_error() {
-    jq -n --arg message "${test_output}" \
-        '{version: 2, status: "error", message: $message}' > "${results_file}"
+    jq -n --argjson version "${INTERFACE_VERSION}" --arg message "${test_output}" \
+        '{version: $version, status: "error", message: $message}' > "${results_file}"
     echo "${slug}: done"
     exit 0
+}
+
+# Read the exercise's test file and return a JSON array of test descriptors:
+# [{name, test_code, task_id?}], in declaration order.
+#
+# `test_code` is required for Concept Exercises, because students are never
+# shown the test file — without it the exercise cannot be solved. `task_id`
+# links a test to a numbered task in the exercise's instructions.md.
+#
+# Students can edit the test file of a Practice Exercise and submit it, so a
+# file that does not parse yields an empty array rather than an error.
+read_test_file() {
+    local path="${solution_dir}/${test_file}"
+    [[ -f "${path}" ]] || { echo '[]'; return; }
+
+    awk -f "${script_dir}/scrape-tests.awk" "${path}" | jq -Rs '
+        split("\u001e")[1:]
+        | map(
+            split("\u001f")
+            | {name: .[1], test_code: .[2]}
+            + (if .[0] == "" then {} else {task_id: (.[0] | tonumber)} end)
+        )
+    '
 }
 
 # Parse Zig's per-test output into a JSON array of test records.
@@ -144,14 +172,52 @@ build_tests_json() {
     '
 }
 
+# Attach each scraped `test_code` and `task_id` to the matching test record.
+#
+# The interface requires results in the order the tests appear in the test
+# file, so when both sides describe exactly the same tests the test file
+# decides the order. If they disagree — a hand-edited test file, a test the
+# parser did not recognize — zig's own ordering is kept and only the records
+# that do match gain the extra fields. Nothing is invented or dropped.
+merge_tests() {
+    local tests_json="$1"
+    local scraped_json="$2"
+    jq -n --argjson tests "${tests_json}" --argjson scraped "${scraped_json}" '
+        # Number each element among its same-named siblings, so that tests
+        # sharing a name still pair up one-to-one.
+        def with_occ:
+            [ foreach .[] as $e ({seen: {}};
+                  .seen[$e.name] = ((.seen[$e.name] // 0) + 1)
+                  | .out = ($e + {occ: .seen[$e.name]});
+                  .out) ];
+        def key: "\(.name) \(.occ)";
+
+        ($tests | with_occ) as $t
+        | ($scraped | with_occ) as $s
+        | ($s | INDEX(key)) as $scraped_by_key
+        | ($t | INDEX(key)) as $result_by_key
+        | (if ($t | map(key) | sort) == ($s | map(key) | sort)
+           then $s | map($result_by_key[key])
+           else $t
+           end)
+        | map(
+            ($scraped_by_key[key]) as $sc
+            | del(.occ)
+            | if ($sc.test_code // "") != "" then .test_code = $sc.test_code else . end
+            | if $sc.task_id != null then .task_id = $sc.task_id else . end
+        )
+    '
+}
+
 # Write the final results.json. Truncates each test's "output" field to
 # 500 chars to bound report size.
 assemble_report() {
     local overall="$1"
     local tests_json="$2"
-    jq -n --arg status "${overall}" --argjson tests "${tests_json}" '
+    jq -n --argjson version "${INTERFACE_VERSION}" \
+          --arg status "${overall}" --argjson tests "${tests_json}" '
         def trunc: if length > 500 then .[:481] + " [output truncated]" else . end;
-        {version: 2, status: $status, tests: ($tests | map(
+        {version: $version, status: $status, tests: ($tests | map(
             if .output then .output |= trunc else . end
         ))}
     ' > "${results_file}"
@@ -164,18 +230,25 @@ main() {
 
     local any_failed=0
     test_output=$(run_zig_test) || any_failed=1
-    if (( any_failed )) && [[ "${test_output}" = *error:* ]]; then
+
+    local tests_json
+    tests_json=$(build_tests_json)
+
+    # Report a top-level error only when the run produced no test results at
+    # all, which is what a compile error looks like. Matching on the string
+    # "error:" instead would misread a runtime stack trace that happens to
+    # contain it, hiding every test result behind a single message.
+    if (( any_failed )) && [[ "$(jq 'length' <<< "${tests_json}")" -eq 0 ]]; then
         emit_compile_error
     fi
 
-    local tests_json overall
-    tests_json=$(build_tests_json)
+    local overall
     if (( any_failed == 0 )); then
         overall="pass"
     else
         overall="fail"
     fi
-    assemble_report "${overall}" "${tests_json}"
+    assemble_report "${overall}" "$(merge_tests "${tests_json}" "$(read_test_file)")"
 
     echo "${slug}: done"
 }

@@ -1,27 +1,32 @@
 {
-  "version": 2,
+  "version": 3,
   "status": "fail",
   "tests": [
     {
       "name": "zero steps for one",
-      "status": "pass"
+      "status": "pass",
+      "test_code": "const expected: usize = 0;\nconst actual = try collatz.steps(1);\ntry testing.expectEqual(expected, actual);"
     },
     {
       "name": "divide if even",
-      "status": "pass"
+      "status": "pass",
+      "test_code": "const expected: usize = 4;\nconst actual = try collatz.steps(16);\ntry testing.expectEqual(expected, actual);"
     },
     {
       "name": "even and odd steps",
-      "status": "pass"
+      "status": "pass",
+      "test_code": "const expected: usize = 9;\nconst actual = try collatz.steps(12);\ntry testing.expectEqual(expected, actual);"
     },
     {
       "name": "large number of even and odd steps",
-      "status": "pass"
+      "status": "pass",
+      "test_code": "const expected: usize = 152;\nconst actual = try collatz.steps(1_000_000);\ntry testing.expectEqual(expected, actual);"
     },
     {
       "name": "zero is an error",
       "status": "fail",
-      "message": "FAIL (TestExpectedError)\n/opt/zig/lib/std/testing.zig:65:9: <MEMHASH> in expectError__anon_<ANON> (std.zig)\n        return error.TestExpectedError;\n        ^\ntest_example_error_exercise.zig:34:5: <MEMHASH> in test.zero is an error (test_example_error_exercise.zig)\n    try testing.expectError(expected, actual);\n    ^"
+      "message": "FAIL (TestExpectedError)\n/opt/zig/lib/std/testing.zig:65:9: <MEMHASH> in expectError__anon_<ANON> (std.zig)\n        return error.TestExpectedError;\n        ^\ntest_example_error_exercise.zig:34:5: <MEMHASH> in test.zero is an error (test_example_error_exercise.zig)\n    try testing.expectError(expected, actual);\n    ^",
+      "test_code": "const expected = ComputationError.IllegalArgument;\nconst actual = collatz.steps(0);\ntry testing.expectError(expected, actual);"
     }
   ]
 }
