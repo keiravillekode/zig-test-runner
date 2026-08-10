@@ -1,0 +1,37 @@
+{
+  "version": 3,
+  "status": "fail",
+  "tests": [
+    {
+      "name": "expected minutes in oven",
+      "status": "pass",
+      "test_code": "try testing.expectEqual(40, lasagna.expected_minutes_in_oven);",
+      "task_id": 1
+    },
+    {
+      "name": "remaining minutes in oven",
+      "status": "pass",
+      "test_code": "try testing.expectEqual(15, lasagna.remainingMinutesInOven(25));",
+      "task_id": 2
+    },
+    {
+      "name": "remaining minutes in oven, already done",
+      "status": "pass",
+      "test_code": "try testing.expectEqual(0, lasagna.remainingMinutesInOven(40));",
+      "task_id": 2
+    },
+    {
+      "name": "preparation time for several layers",
+      "status": "fail",
+      "message": "FAIL (TestExpectedEqual)\n/opt/zig/lib/std/testing.zig:118:17: <MEMHASH> in expectEqualInner__anon_<ANON> (std.zig)\n                return error.TestExpectedEqual;\n                ^\n/opt/zig/lib/std/testing.zig:83:5: <MEMHASH> in expectEqual (test_example_concept_exercise.zig)\n    return expectEqualInner(T, expected, actual);\n    ^\ntest_example_concept_exercise.zig:25:5: <MEMHASH> in test.preparation time for several layers (test_example_concept_exercise.zig)\n    try testing.expectEqual(8, lasagna.preparationTimeInMinutes(layers));\n    ^",
+      "test_code": "const layers: u32 = 4;\n\ntry testing.expectEqual(8, lasagna.preparationTimeInMinutes(layers));",
+      "task_id": 3
+    },
+    {
+      "name": "preparation time and remaining oven time",
+      "status": "fail",
+      "message": "FAIL (TestExpectedEqual)\n/opt/zig/lib/std/testing.zig:118:17: <MEMHASH> in expectEqualInner__anon_<ANON> (std.zig)\n                return error.TestExpectedEqual;\n                ^\n/opt/zig/lib/std/testing.zig:83:5: <MEMHASH> in expectEqual (test_example_concept_exercise.zig)\n    return expectEqualInner(T, expected, actual);\n    ^\ntest_example_concept_exercise.zig:32:5: <MEMHASH> in test.preparation time and remaining oven time (test_example_concept_exercise.zig)\n    try testing.expectEqual(14, preparation + remaining);\n    ^",
+      "test_code": "const preparation = lasagna.preparationTimeInMinutes(2);\nconst remaining = lasagna.remainingMinutesInOven(30);\ntry testing.expectEqual(14, preparation + remaining);"
+    }
+  ]
+}
